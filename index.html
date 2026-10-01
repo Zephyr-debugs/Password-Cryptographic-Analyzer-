@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Keyspace: password strength and collision analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="bar">
+  <div class="wrap">
+    <span class="wordmark">Keyspace</span>
+    <span class="live" id="live">Waiting for input</span>
+    <nav class="jump" aria-label="Sections">
+      <a href="#count">Counting</a><a href="#guess">Guessing time</a><a href="#collide">Collisions</a><a href="#phrase">Passphrases</a><a href="#compare">Policies</a>
+    </nav>
+    <button class="linkbtn" id="theme" type="button">Dark mode</button>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>How long would it take to count every password like yours?</h1>
+    <p class="sub">A password is one item picked from a very large, countable set. This page counts that set with permutations, combinations and the pigeonhole principle, then turns the count into entropy, guessing time and collision odds. It all runs inside this tab; nothing you type is sent anywhere.</p>
+
+    <div class="modes" role="group" aria-label="Input mode">
+      <button type="button" id="m-typed" aria-pressed="true">Type a password</button>
+      <button type="button" id="m-model" aria-pressed="false">Describe a policy</button>
+    </div>
+
+    <div id="typed-box">
+      <label for="pw">Password</label>
+      <div class="pwrow">
+        <input id="pw" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="128" value="Summer2024!">
+        <button class="linkbtn" id="reveal" type="button">Hide</button>
+      </div>
+      <p class="hint" id="detected"></p>
+    </div>
+
+    <div id="model-box" hidden>
+      <div class="lenrow">
+        <label for="len">Length</label>
+        <input type="range" id="len" min="1" max="64" value="12">
+        <output id="len-out" for="len">12</output>
+      </div>
+      <fieldset>
+        <legend>Characters allowed</legend>
+        <div class="chips" id="chips"></div>
+      </fieldset>
+      <p class="hint">A policy has no text to inspect, so it is treated as if every character were picked at random.</p>
+    </div>
+
+    <div class="wheels" id="wheels" aria-hidden="true"></div>
+    <p class="product" id="product"></p>
+
+    <h2 class="headline" id="headline"></h2>
+    <p class="para" id="verdict-p"></p>
+    <svg id="ruler" class="ruler" viewBox="0 0 620 72" role="img" aria-label="Entropy scale from 0 to 160 bits"></svg>
+    <div class="legend" id="ruler-legend"></div>
+    <ul class="obs" id="obs"></ul>
+    <dl class="readout" id="readout"></dl>
+
+    <div class="attackers">
+      <h3>Who is guessing</h3>
+      <div class="att-list" id="att-list"></div>
+      <div id="custom-rate" hidden>
+        <label for="rate-in">Guesses per second</label>
+        <input id="rate-in" type="text" inputmode="decimal" value="1e9">
+      </div>
+      <p class="hint">Rates are round-number assumptions for comparison, not benchmarks. Every time on this page uses the attacker chosen here.</p>
+    </div>
+  </div>
+</header>
+
+<section class="band alt" id="count">
+  <div class="wrap grid2">
+    <div class="txt">
+      <h2>How many passwords are possible</h2>
+      <p>Each position holds one character, and characters may repeat. Choosing R symbols for each of L positions is an ordered arrangement with repetition, so there are R<sup>L</sup> possibilities.</p>
+      <p>Change the rules and the count changes sharply. Forbid repeats and it is a permutation, P(R, L). Ignore order and it becomes a combination, C(R, L), which is smaller by a factor of L!. Only the first row is a real password model, but the others show how much of the strength comes from order and repetition.</p>
+      <p>Requiring at least one character from every class removes some strings. Inclusion and exclusion counts exactly how many.</p>
+      <p id="pigeon-note"></p>
+    </div>
+    <div class="scroll">
+      <table id="count-table">
+        <thead><tr><th>Way of counting</th><th class="n">Possibilities</th><th class="n">Bits</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="guess">
+  <div class="wrap">
+    <h2>How long it takes to guess</h2>
+    <p class="lede">A guesser who tries candidates in random order finds the target halfway through the keyspace on average, so average time is N divided by 2, divided by the guess rate. The curves show how quickly length wins.</p>
+    <div class="grid2 even">
+      <div>
+        <svg class="chart" id="time-chart" viewBox="0 0 640 310" role="img" aria-label="Average guessing time against password length"></svg>
+        <div class="key" id="time-key"></div>
+      </div>
+      <div class="scroll">
+        <table id="time-table">
+          <thead><tr><th>Attacker</th><th class="n">If random</th><th class="n" id="th-typed">As typed</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band alt" id="collide">
+  <div class="wrap">
+    <h2>When two inputs land in the same slot</h2>
+    <p class="lede">A hash squeezes unlimited inputs into 2<sup>b</sup> outputs. By the pigeonhole principle, once there are more inputs than outputs two must share one. The birthday problem says a collision shows up far earlier, around the square root of the slot count.</p>
+    <div class="grid2 even">
+      <div>
+        <div class="ctl">
+          <label>Hash output size</label>
+          <div class="seg" id="hash-seg"></div>
+        </div>
+        <div class="ctl">
+          <label for="logn">Number of inputs hashed</label>
+          <input type="range" id="logn" min="0" max="80" step="0.1" value="6">
+          <output id="logn-out" for="logn">1,000,000</output>
+        </div>
+        <dl class="facts" id="hash-facts"></dl>
+      </div>
+      <div>
+        <svg class="chart" id="birthday-chart" viewBox="0 0 640 300" role="img" aria-label="Collision probability against number of inputs"></svg>
+        <div class="key" id="bday-key"></div>
+      </div>
+    </div>
+
+    <div class="grid2 even" style="margin-top:44px">
+      <div class="txt">
+        <h3 style="font:700 22px/1.2 var(--sans);margin:0 0 10px">Two users, one password</h3>
+        <p id="space-note"></p>
+      </div>
+      <dl class="facts" id="space-facts"></dl>
+    </div>
+
+    <div class="lab">
+      <h3>See the pigeonhole principle happen</h3>
+      <p class="lede" style="margin-bottom:14px">A toy hash with few buckets. Each button press hashes a random eight-letter password into a bucket. Real hashes behave the same way, just with far more buckets.</p>
+      <div class="grid2 even">
+        <div>
+          <div class="ctl">
+            <label for="lab-bits">Buckets</label>
+            <input type="range" id="lab-bits" min="4" max="10" step="1" value="6">
+            <output id="lab-bits-out" for="lab-bits">64</output>
+          </div>
+          <div class="lab-actions">
+            <button class="btn" id="lab-one" type="button">Hash one password</button>
+            <button class="btn ghost" id="lab-run" type="button">Run until a collision</button>
+            <button class="btn ghost" id="lab-reset" type="button">Start over</button>
+          </div>
+          <div class="cells" id="cells" aria-hidden="true"></div>
+          <p class="status" id="lab-status" aria-live="polite"></p>
+        </div>
+        <div>
+          <button class="btn ghost" id="lab-trials" type="button">Repeat 2,000 times</button>
+          <svg class="chart" id="lab-hist" viewBox="0 0 520 200" role="img" aria-label="Histogram of how many inputs were needed for the first collision" style="margin-top:14px"></svg>
+          <p class="status" id="lab-stats"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="phrase">
+  <div class="wrap">
+    <h2>Passphrases instead of characters</h2>
+    <p class="lede">Picking whole words from a list is the same counting problem with a bigger alphabet. The alphabet is the word list, and the length is the number of words.</p>
+    <div class="grid2 even">
+      <div>
+        <div class="ctl">
+          <label for="dict">Words in the list</label>
+          <input id="dict" type="number" min="2" max="1000000" step="1" value="7776">
+          <p class="hint">7,776 is the Diceware list, 2,048 is the BIP-39 list.</p>
+        </div>
+        <div class="ctl">
+          <label for="pk">Number of words</label>
+          <input type="range" id="pk" min="2" max="12" step="1" value="5">
+          <output id="pk-out" for="pk">5</output>
+        </div>
+      </div>
+      <dl class="facts" id="phrase-facts"></dl>
+    </div>
+  </div>
+</section>
+
+<section class="band alt" id="compare">
+  <div class="wrap">
+    <h2>Common policies side by side</h2>
+    <p class="lede">Random choices only. Times use the attacker selected at the top.</p>
+    <div class="scroll">
+      <table id="ref-table">
+        <thead><tr><th>Policy</th><th>Entropy</th><th class="n">Possibilities</th><th class="n">Average time</th><th>Rating</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="notes">
+  <div class="wrap grid2">
+    <div>
+      <h2>Take the numbers with you</h2>
+      <p class="lede">A plain-text summary of the current analysis. It contains lengths and counts, never the password itself.</p>
+      <button class="btn" id="copy" type="button">Copy summary</button>
+      <p class="hint" id="copy-msg" aria-live="polite"></p>
+    </div>
+    <textarea id="report" readonly aria-label="Summary"></textarea>
+  </div>
+  <div class="wrap" style="margin-top:56px">
+    <h2 style="font-size:26px">How it works, and where it is wrong</h2>
+    <details><summary>Entropy and keyspace</summary>
+      <p>With alphabet size R and length L there are N = R<sup>L</sup> equally likely passwords when characters are chosen uniformly at random. Entropy is H = log<sub>2</sub> N = L log<sub>2</sub> R bits. Each bit doubles the search.</p>
+    </details>
+    <details><summary>Guessing time</summary>
+      <p>An attacker who enumerates in random order needs (N + 1) / 2 guesses on average and N in the worst case. Dividing by guesses per second gives time. The rates in the attacker list are round numbers for a sense of scale and depend heavily on the hash function and hardware.</p>
+    </details>
+    <details><summary>Permutations, combinations and inclusion–exclusion</summary>
+      <p>Ordered with repeats: R<sup>L</sup>. Ordered without repeats: R! / (R − L)!. Unordered without repeats: R! / (L! (R − L)!). Unordered with repeats: C(R + L − 1, L). A policy that demands at least one character from each of k classes is counted as the sum over subsets S of the classes of (−1)<sup>|S|</sup> (R − sizes in S)<sup>L</sup>. The rearrangements of your own characters are L! divided by the factorial of each repeated character's count. All counts are exact big integers.</p>
+    </details>
+    <details><summary>Pigeonhole and birthday bounds</summary>
+      <p>With n inputs and 2<sup>b</sup> slots, n &gt; 2<sup>b</sup> forces a collision. For n much smaller, the chance of at least one collision is about 1 − e<sup>−n(n−1) / 2<sup>b+1</sup></sup>. The number of inputs for probability p is about √(2 · 2<sup>b</sup> · ln(1 / (1 − p))).</p>
+    </details>
+    <details><summary>The pattern-aware estimate</summary>
+      <p>The uniform figure assumes random characters, which people rarely produce. The as-typed estimate splits the password into the cheapest mix of pieces: common passwords by rank, dictionary words (including simple substitutions such as @ for a), years, repeated characters or blocks, alphabet and number sequences, and keyboard runs. Everything else costs log<sub>2</sub> R bits per character. The word list here is a small built-in sample, so real attackers with millions of words do better than this model. Treat it as an illustration of the idea, not a substitute for a tool such as zxcvbn.</p>
+    </details>
+    <details><summary>Other limits</summary>
+      <p>Characters outside printable ASCII are counted as a pool of 100, a rough guess. Passwords reused across sites, leaked in earlier breaches, or guessed from personal details are weaker than any of these figures. Long random passphrases and a password manager beat clever substitutions.</p>
+    </details>
+  </div>
+</section>
+
+<footer><div class="wrap">Keyspace is a teaching tool. Time estimates are order-of-magnitude.</div></footer>
+
+<script src="app.js"></script>
+</body>
+</html>
