@@ -4,9 +4,7 @@ A web dashboard that treats a password as one item picked from a very large, cou
 
 **Live demo:** https://zephyr-debugs.github.io/Password-Cryptographic-Analyzer-/
 
-<!-- Add a screenshot of the dashboard here:
-![Keyspace dashboard](screenshot.png)
--->
+   ![Keyspace dashboard](screenshot.png)
 
 Everything runs in the browser. There is no backend, no build step and no dependencies, and nothing you type is sent anywhere.
 
